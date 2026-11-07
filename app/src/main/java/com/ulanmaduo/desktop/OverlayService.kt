@@ -23,6 +23,7 @@ class OverlayService : Service() {
             intent ?: return
             intent.getStringExtra("action")?.let { pet?.setAction(it) }
             if (intent.hasExtra("casual")) pet?.setCasualMode(intent.getBooleanExtra("casual", false))
+            intent.getStringExtra("model_path")?.let { pet?.setModelFile(it) }
         }
     }
 
@@ -65,6 +66,7 @@ class OverlayService : Service() {
         val characterPrefs = getSharedPreferences("ulan_maduo", MODE_PRIVATE)
         character.setCasualMode(characterPrefs.getBoolean("casual_outfit", false))
         character.setAction(characterPrefs.getString("character_action", "idle") ?: "idle")
+        characterPrefs.getString("model_path", null)?.let { if (java.io.File(it).exists()) character.setModelFile(it) }
         frame.addView(character, FrameLayout.LayoutParams(dp(164), dp(208), Gravity.CENTER))
         val caption = TextView(this).apply {
             text = "乌兰麦朵"
