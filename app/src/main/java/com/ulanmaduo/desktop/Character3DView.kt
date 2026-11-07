@@ -152,12 +152,26 @@ class Character3DView(context: Context) : GLSurfaceView(context) {
             part(-0.13f, 1.59f, 0.445f, 0.035f, 0.045f, 0.025f, 0.12f, 0.10f, 0.09f, 0f, 0f, 0f, blink)
             part(0.13f, 1.59f, 0.445f, 0.035f, 0.045f, 0.025f, 0.12f, 0.10f, 0.09f, 0f, 0f, 0f, blink)
             part(0f, 1.46f, 0.455f, 0.055f, 0.018f, 0.018f, 0.63f, 0.28f, 0.28f)
+            // Iris, eye highlights, brows, nose and soft smile add readable facial expression
+            part(-0.13f, 1.59f, 0.468f, 0.014f, 0.026f, 0.012f, 0.34f, 0.23f, 0.17f, 0f, 0f, 0f, blink)
+            part(0.13f, 1.59f, 0.468f, 0.014f, 0.026f, 0.012f, 0.34f, 0.23f, 0.17f, 0f, 0f, 0f, blink)
+            part(-0.13f, 1.62f, 0.479f, 0.008f, 0.009f, 0.006f, 1f, 0.94f, 0.82f, 0f, 0f, 0f, blink)
+            part(0.13f, 1.62f, 0.479f, 0.008f, 0.009f, 0.006f, 1f, 0.94f, 0.82f, 0f, 0f, 0f, blink)
+            part(-0.13f, 1.67f, 0.448f, 0.075f, 0.018f, 0.018f, 0.22f, 0.15f, 0.13f, 0f, 0f, -5f)
+            part(0.13f, 1.67f, 0.448f, 0.075f, 0.018f, 0.018f, 0.22f, 0.15f, 0.13f, 0f, 0f, 5f)
+            part(0f, 1.51f, 0.468f, 0.018f, 0.035f, 0.018f, 0.82f, 0.55f, 0.46f)
+            part(0f, 1.405f, 0.465f, 0.052f, 0.009f, 0.012f, 0.55f, 0.19f, 0.22f)
 
             // Battle suit torso, collar and chest plates
             part(0f, 0.91f, 0f, 0.39f, 0.48f * breath, 0.23f, torsoColor[0], torsoColor[1], torsoColor[2])
             part(0f, 1.13f, 0.20f, 0.22f, 0.12f, 0.08f, armorColor[0], armorColor[1], armorColor[2])
             part(0f, 0.83f, 0.235f, 0.20f, 0.20f, 0.055f, armorColor[0], armorColor[1], armorColor[2])
             part(0f, 0.59f, 0f, 0.32f, 0.16f, 0.21f, 0.08f, 0.15f, 0.20f)
+            // Tailored waist belt, center clasp and uniform seams
+            part(0f, 0.60f, 0.225f, 0.30f, 0.055f, 0.035f, 0.20f, 0.25f, 0.27f)
+            part(0f, 0.60f, 0.266f, 0.055f, 0.045f, 0.018f, 0.82f, 0.68f, 0.42f)
+            part(-0.19f, 0.91f, 0.238f, 0.025f, 0.20f, 0.018f, armorColor[0], armorColor[1], armorColor[2], 0f, 0f, -12f)
+            part(0.19f, 0.91f, 0.238f, 0.025f, 0.20f, 0.018f, armorColor[0], armorColor[1], armorColor[2], 0f, 0f, 12f)
 
             // Shoulder guards and arms
             part(-0.43f, 1.13f, 0f, 0.19f, 0.18f, 0.19f, armorColor[0], armorColor[1], armorColor[2])
@@ -174,6 +188,11 @@ class Character3DView(context: Context) : GLSurfaceView(context) {
             part(if (sitting) 0.34f else 0.18f, rightLegY, if (sitting) 0.08f else 0f, 0.17f, 0.38f, 0.17f, 0.10f, 0.19f, 0.24f, 0f, 0f, rightLegZ)
             part(if (sitting) -0.52f else -0.18f, if (sitting) -0.02f else -0.08f, 0.12f, 0.19f, 0.15f, 0.28f, 0.08f, 0.11f, 0.14f)
             part(if (sitting) 0.52f else 0.18f, if (sitting) -0.02f else -0.08f, 0.12f, 0.19f, 0.15f, 0.28f, 0.08f, 0.11f, 0.14f)
+            // Knee guards and boot accents
+            part(if (sitting) -0.34f else -0.18f, if (sitting) 0.20f else 0.28f, 0.155f, 0.13f, 0.10f, 0.045f, armorColor[0], armorColor[1], armorColor[2])
+            part(if (sitting) 0.34f else 0.18f, if (sitting) 0.20f else 0.28f, 0.155f, 0.13f, 0.10f, 0.045f, armorColor[0], armorColor[1], armorColor[2])
+            part(if (sitting) -0.52f else -0.18f, if (sitting) -0.01f else -0.07f, 0.365f, 0.12f, 0.025f, 0.025f, 0.65f, 0.53f, 0.37f)
+            part(if (sitting) 0.52f else 0.18f, if (sitting) -0.01f else -0.07f, 0.365f, 0.12f, 0.025f, 0.025f, 0.65f, 0.53f, 0.37f)
 
             GLES20.glDisableVertexAttribArray(pos)
             GLES20.glDisableVertexAttribArray(normal)
