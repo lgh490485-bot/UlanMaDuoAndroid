@@ -68,6 +68,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 setOnClickListener {
                     prefs.edit().putString("character_action", action).apply()
                     avatar.setAction(action)
+                    sendBroadcast(Intent(OverlayService.ACTION_UPDATE_PET).putExtra("action", action))
                     Toast.makeText(this@MainActivity, "动作：$label", Toast.LENGTH_SHORT).show()
                 }
             }, LinearLayout.LayoutParams(0, -2, 1f))
@@ -79,6 +80,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 val next = !prefs.getBoolean("casual_outfit", false)
                 prefs.edit().putBoolean("casual_outfit", next).apply()
                 avatar.setCasualMode(next)
+                sendBroadcast(Intent(OverlayService.ACTION_UPDATE_PET).putExtra("casual", next))
                 text = if (next) "切换战斗服" else "切换日常服"
                 Toast.makeText(this@MainActivity, if (next) "已换上日常服" else "已换上战斗服", Toast.LENGTH_SHORT).show()
             }
