@@ -218,12 +218,45 @@ class GlbModel private constructor(private val meshes: List<Mesh>) {
             }
             val meshesJson = root.getJSONArray("meshes")
             val nodes = root.getJSONArray("nodes")
+            val skins = root.optJSONArray("skins")
+            val jointNodeIds = if (skins != null && skins.length() > 0) skins.getJSONObject(0).getJSONArray("joints") else org.json.JSONArray()
+            val jointMap = HashMap<Int, Int>()
+            for (i in 0 until jointNodeIds.length()) jointMap[jointNodeIds.getInt(i)] = i
+            val parentMap = HashMap<Int, Int>()
+            for (i in 0 until nodes.length()) {
+                val children = nodes.getJSONObject(i).optJSONArray("children") ?: continue
+                for (j in 0 until children.length()) parentMap[children.getInt(j)] = i
+            }
+            val rig = ArrayList<Joint>()
+            for (i in 0 until jointNodeIds.length()) {
+                val nodeId = jointNodeIds.getInt(i)
+                val node = nodes.getJSONObject(nodeId)
+                val tr = node.optJSONArray("translation")
+                val parentNode = parentMap[nodeId] ?: -1
+                rig.add(Joint(node.optString("name").removePrefix("Bone_"), jointMap[parentNode] ?: -1,
+                    tr?.optDouble(0, 0.0)?.toFloat() ?: 0f,
+                    tr?.optDouble(1, 0.0)?.toFloat() ?: 0f,
+                    tr?.optDouble(2, 0.0)?.toFloat() ?: 0f))
+            }
+            val inverseBind = if (skins != null && skins.length() > 0 && skins.getJSONObject(0).has("inverseBindMatrices"))
+                floatData(skins.getJSONObject(0).getInt("inverseBindMatrices"), 16) else FloatArray(0)
             val meshOrder = ArrayList<Int>()
             for (i in 0 until nodes.length()) {
                 val node = nodes.getJSONObject(i)
                 if (node.has("mesh")) meshOrder.add(node.getInt("mesh"))
             }
             if (meshOrder.isEmpty()) for (i in 0 until meshesJson.length()) meshOrder.add(i)
+            fun byteVec4(index: Int, normalized: Boolean): FloatArray {
+                val a = accessor(index); val v = view(a.getInt("bufferView"))
+                val count = a.getInt("count"); val stride = v.optInt("byteStride", 4)
+                val offset = v.optInt("byteOffset", 0) + a.optInt("byteOffset", 0)
+                val out = FloatArray(count * 4)
+                for (i in 0 until count) for (c in 0 until 4) {
+                    val value = bin.get(offset + i * stride + c).toInt() and 255
+                    out[i * 4 + c] = if (normalized) value / 255f else value.toFloat()
+                }
+                return out
+            }
             val result = ArrayList<Mesh>()
             val nodeNames = HashMap<Int, String>()
             for (i in 0 until nodes.length()) { val node = nodes.getJSONObject(i); if (node.has("mesh")) nodeNames[node.getInt("mesh")] = node.optString("name", "mesh_${node.getInt("mesh")}") }
@@ -260,16 +293,20 @@ class GlbModel private constructor(private val meshes: List<Mesh>) {
                         packed[o] /= length; packed[o + 1] /= length; packed[o + 2] /= length
                     }
                     val colors = colorData(attrs.getInt("COLOR_0"), vertexCount)
+                    val jointIds = if (attrs.has("JOINTS_0")) byteVec4(attrs.getInt("JOINTS_0"), false) else FloatArray(vertexCount * 4)
+                    val weights = if (attrs.has("WEIGHTS_0")) byteVec4(attrs.getInt("WEIGHTS_0"), true) else FloatArray(vertexCount * 4).also { a -> for (v in 0 until vertexCount) a[v * 4] = 1f }
+                    val baseVertices = packed.copyOf()
                     val shorts = ShortArray(idx.size) { idx[it].toShort() }
                     fun directFloats(data: FloatArray): FloatBuffer = ByteBuffer.allocateDirect(data.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply { put(data); position(0) }
                     val indexBuffer = ByteBuffer.allocateDirect(shorts.size * 2).order(ByteOrder.nativeOrder()).asShortBuffer().apply { put(shorts); position(0) }
                     val pivotX = when { meshName.endsWith("_R") && (meshName.startsWith("upper_arm") || meshName.startsWith("pauldron")) -> 0.39f; meshName.endsWith("_L") && (meshName.startsWith("upper_arm") || meshName.startsWith("pauldron")) -> -0.39f; meshName.endsWith("_R") && (meshName.startsWith("elbow") || meshName.startsWith("forearm") || meshName.startsWith("glove")) -> 0.47f; meshName.endsWith("_L") && (meshName.startsWith("elbow") || meshName.startsWith("forearm") || meshName.startsWith("glove")) -> -0.47f; meshName.endsWith("_R") -> 0.17f; meshName.endsWith("_L") -> -0.17f; else -> 0f }
                     val pivotY = when { meshName.startsWith("upper_arm") || meshName.startsWith("pauldron") -> 1.53f; meshName.startsWith("elbow") || meshName.startsWith("forearm") || meshName.startsWith("glove") -> 1.25f; meshName.startsWith("thigh") -> 1.20f; meshName.startsWith("shin") || meshName.startsWith("knee_guard") -> 0.64f; meshName.startsWith("boot") -> 0.20f; else -> 0f }
-                    result.add(Mesh(meshName, directFloats(packed), directFloats(colors), indexBuffer, shorts.size, pivotX, pivotY, 0f))
+                    result.add(Mesh(meshName, directFloats(packed), directFloats(colors), indexBuffer, shorts.size, pivotX, pivotY, 0f, baseVertices, jointIds, weights))
                 }
             }
             require(result.isNotEmpty()) { "GLB 中没有可显示的网格" }
-            return GlbModel(result)
+            require(rig.isEmpty() || inverseBind.size == rig.size * 16) { "骨骼逆绑定矩阵数量不匹配" }
+            return GlbModel(result, rig, inverseBind)
         }
     }
 }
