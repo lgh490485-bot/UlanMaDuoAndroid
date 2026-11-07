@@ -2,6 +2,9 @@ package com.ulanmaduo.desktop
 
 import android.app.*
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
@@ -15,6 +18,13 @@ class OverlayService : Service() {
     private var pet: Character3DView? = null
     private var label: TextView? = null
     private var container: FrameLayout? = null
+    private val petUpdates = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            intent ?: return
+            intent.getStringExtra("action")?.let { pet?.setAction(it) }
+            if (intent.hasExtra("casual")) pet?.setCasualMode(intent.getBooleanExtra("casual", false))
+        }
+    }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
@@ -39,6 +49,10 @@ class OverlayService : Service() {
                 .setContentIntent(pending)
                 .build()
         )
+
+        val filter = IntentFilter(ACTION_UPDATE_PET)
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(petUpdates, filter, Context.RECEIVER_NOT_EXPORTED)
+        else @Suppress("DEPRECATION") run { registerReceiver(petUpdates, filter) }
 
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         val frame = FrameLayout(this)
@@ -128,6 +142,7 @@ class OverlayService : Service() {
     }
 
     override fun onDestroy() {
+        try { unregisterReceiver(petUpdates) } catch (_: Exception) { }
         pet?.onPause()
         container?.let { try { wm.removeView(it) } catch (_: Exception) { } }
         pet = null
@@ -138,4 +153,8 @@ class OverlayService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    companion object {
+        const val ACTION_UPDATE_PET = "com.ulanmaduo.desktop.UPDATE_PET"
+    }
 }
