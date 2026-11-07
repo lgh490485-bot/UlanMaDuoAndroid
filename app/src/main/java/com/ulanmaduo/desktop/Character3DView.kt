@@ -17,7 +17,7 @@ class Character3DView(context: Context) : GLSurfaceView(context) {
     private val characterRenderer = CharacterRenderer()
 
     fun setModelFile(path: String?) {
-        characterRenderer.setModelFile(path)
+        queueEvent { characterRenderer.setModelFile(path) }
         requestRender()
     }
 
@@ -60,6 +60,7 @@ class Character3DView(context: Context) : GLSurfaceView(context) {
         fun setModelFile(path: String?) {
             modelPath = path
             glbModel = try { if (path.isNullOrBlank()) null else GlbModel.load(File(path)) } catch (_: Exception) { null }
+            if (program != 0) glbModel?.createGl()
         }
         @Volatile var casualMode: Boolean = false
         @Volatile var action: String = "idle"
