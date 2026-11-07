@@ -6,13 +6,17 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
 import android.view.*
+import android.widget.FrameLayout
 import android.widget.TextView
-import android.widget.Toast
 import kotlin.math.abs
 
 class OverlayService : Service() {
     private lateinit var wm: WindowManager
-    private var bubble: View? = null
+    private var pet: Character3DView? = null
+    private var label: TextView? = null
+    private var container: FrameLayout? = null
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     override fun onCreate() {
         super.onCreate()
@@ -30,36 +34,35 @@ class OverlayService : Service() {
         startForeground(
             1,
             builder.setContentTitle("乌兰麦朵正在桌面陪伴你")
-                .setContentText("点击通知打开聊天控制页")
+                .setContentText("点击桌宠打开聊天，长按拖动")
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentIntent(pending)
                 .build()
         )
 
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
-        val v = TextView(this).apply {
-            text = "乌兰\n麦朵\n点我聊天"
-            textSize = 14f
+        val frame = FrameLayout(this)
+        val character = Character3DView(this)
+        frame.addView(character, FrameLayout.LayoutParams(dp(164), dp(208), Gravity.CENTER))
+        val caption = TextView(this).apply {
+            text = "乌兰麦朵"
+            textSize = 12f
             gravity = Gravity.CENTER
-            setTextColor(0xFFFFFFFF.toInt())
-            setBackgroundColor(0xE6553F35.toInt())
-            setPadding(18, 16, 18, 16)
-            elevation = 12f
-            contentDescription = "乌兰麦朵悬浮桌宠，点击打开聊天，拖动可移动"
+            setTextColor(0xFF493A32.toInt())
+            setBackgroundColor(0xBFF4F0E8.toInt())
         }
+        frame.addView(caption, FrameLayout.LayoutParams(-1, dp(26), Gravity.BOTTOM))
         val type = if (Build.VERSION.SDK_INT >= 26) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE
         val p = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            type,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            dp(176), dp(238), type,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 80
-            y = 220
+            x = dp(42)
+            y = dp(150)
         }
-        v.setOnTouchListener(object : View.OnTouchListener {
+        frame.setOnTouchListener(object : View.OnTouchListener {
             private var sx = 0f
             private var sy = 0f
             private var ox = 0
@@ -69,17 +72,15 @@ class OverlayService : Service() {
             override fun onTouch(view: View, event: MotionEvent): Boolean {
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
-                        sx = event.rawX
-                        sy = event.rawY
-                        ox = p.x
-                        oy = p.y
+                        sx = event.rawX; sy = event.rawY
+                        ox = p.x; oy = p.y
                         moved = false
                         return true
                     }
                     MotionEvent.ACTION_MOVE -> {
                         val dx = event.rawX - sx
                         val dy = event.rawY - sy
-                        if (abs(dx) > 8 || abs(dy) > 8) moved = true
+                        if (abs(dx) > dp(7) || abs(dy) > dp(7)) moved = true
                         p.x = ox + dx.toInt()
                         p.y = oy + dy.toInt()
                         try { wm.updateViewLayout(view, p) } catch (_: Exception) { }
@@ -87,10 +88,9 @@ class OverlayService : Service() {
                     }
                     MotionEvent.ACTION_UP -> {
                         if (!moved) {
-                            val open = Intent(this@OverlayService, MainActivity::class.java).apply {
+                            startActivity(Intent(this@OverlayService, MainActivity::class.java).apply {
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                            }
-                            startActivity(open)
+                            })
                         }
                         return true
                     }
@@ -99,15 +99,18 @@ class OverlayService : Service() {
                 return true
             }
         })
-        bubble = v
-        wm.addView(v, p)
+        container = frame
+        pet = character
+        label = caption
+        wm.addView(frame, p)
     }
 
     override fun onDestroy() {
-        bubble?.let {
-            try { wm.removeView(it) } catch (_: Exception) { }
-        }
-        bubble = null
+        pet?.onPause()
+        container?.let { try { wm.removeView(it) } catch (_: Exception) { } }
+        pet = null
+        label = null
+        container = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
