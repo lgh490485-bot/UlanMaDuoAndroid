@@ -7,6 +7,7 @@ import android.opengl.Matrix
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
+import java.io.File
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.cos
@@ -14,6 +15,11 @@ import kotlin.math.sin
 
 class Character3DView(context: Context) : GLSurfaceView(context) {
     private val characterRenderer = CharacterRenderer()
+
+    fun setModelFile(path: String?) {
+        characterRenderer.setModelFile(path)
+        requestRender()
+    }
 
     fun setCasualMode(enabled: Boolean) {
         characterRenderer.casualMode = enabled
@@ -48,6 +54,13 @@ class Character3DView(context: Context) : GLSurfaceView(context) {
         private val mvpMatrix = FloatArray(16)
         private val temp = FloatArray(16)
         private var start = System.nanoTime()
+        @Volatile private var modelPath: String? = null
+        @Volatile private var glbModel: GlbModel? = null
+
+        fun setModelFile(path: String?) {
+            modelPath = path
+            glbModel = try { if (path.isNullOrBlank()) null else GlbModel.load(File(path)) } catch (_: Exception) { null }
+        }
         @Volatile var casualMode: Boolean = false
         @Volatile var action: String = "idle"
 
@@ -96,6 +109,8 @@ class Character3DView(context: Context) : GLSurfaceView(context) {
             vertices.put(data).position(0)
             vertexCount = data.size / 6
             start = System.nanoTime()
+            glbModel = try { modelPath?.let { GlbModel.load(File(it)) } } catch (_: Exception) { null }
+            glbModel?.createGl()
         }
 
         private fun compile(type: Int, source: String): Int {
@@ -113,6 +128,7 @@ class Character3DView(context: Context) : GLSurfaceView(context) {
 
         override fun onDrawFrame(gl: GL10?) {
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
+            glbModel?.let { it.draw(view, projection); return }
             GLES20.glUseProgram(program)
             vertices.position(0)
             GLES20.glEnableVertexAttribArray(pos)
