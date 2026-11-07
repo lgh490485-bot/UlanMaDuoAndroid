@@ -13,9 +13,16 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 class Character3DView(context: Context) : GLSurfaceView(context) {
+    private val characterRenderer = CharacterRenderer()
+
+    fun setCasualMode(enabled: Boolean) {
+        characterRenderer.casualMode = enabled
+        requestRender()
+    }
+
     init {
         setEGLContextClientVersion(2)
-        setRenderer(CharacterRenderer())
+        setRenderer(characterRenderer)
         renderMode = RENDERMODE_CONTINUOUSLY
         setZOrderOnTop(false)
     }
@@ -36,6 +43,7 @@ class Character3DView(context: Context) : GLSurfaceView(context) {
         private val mvpMatrix = FloatArray(16)
         private val temp = FloatArray(16)
         private var start = System.nanoTime()
+        @Volatile var casualMode: Boolean = false
 
         override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
             GLES20.glClearColor(0.94f, 0.91f, 0.86f, 1f)
@@ -111,6 +119,10 @@ class Character3DView(context: Context) : GLSurfaceView(context) {
             val wave = (sin(t * 1.7) * 5.0).toFloat()
             val blinkPhase = (t % 4.3)
             val blink = if (blinkPhase > 3.92 && blinkPhase < 4.08) 0.18f else 1f
+            val casual = casualMode
+            val torsoColor = if (casual) floatArrayOf(0.58f, 0.30f, 0.28f) else floatArrayOf(0.12f, 0.24f, 0.30f)
+            val armorColor = if (casual) floatArrayOf(0.82f, 0.70f, 0.58f) else floatArrayOf(0.70f, 0.72f, 0.68f)
+            val sleeveColor = if (casual) floatArrayOf(0.72f, 0.58f, 0.48f) else floatArrayOf(0.12f, 0.24f, 0.30f)
 
             // Hair silhouette and long side locks
             part(0f, 1.92f, -0.08f, 0.48f, 0.48f, 0.38f, 0.16f, 0.10f, 0.09f)
@@ -129,18 +141,18 @@ class Character3DView(context: Context) : GLSurfaceView(context) {
             part(0f, 1.46f, 0.455f, 0.055f, 0.018f, 0.018f, 0.63f, 0.28f, 0.28f)
 
             // Battle suit torso, collar and chest plates
-            part(0f, 0.91f, 0f, 0.39f, 0.48f * breath, 0.23f, 0.12f, 0.24f, 0.30f)
-            part(0f, 1.13f, 0.20f, 0.22f, 0.12f, 0.08f, 0.80f, 0.78f, 0.69f)
-            part(0f, 0.83f, 0.235f, 0.20f, 0.20f, 0.055f, 0.70f, 0.72f, 0.68f)
+            part(0f, 0.91f, 0f, 0.39f, 0.48f * breath, 0.23f, torsoColor[0], torsoColor[1], torsoColor[2])
+            part(0f, 1.13f, 0.20f, 0.22f, 0.12f, 0.08f, armorColor[0], armorColor[1], armorColor[2])
+            part(0f, 0.83f, 0.235f, 0.20f, 0.20f, 0.055f, armorColor[0], armorColor[1], armorColor[2])
             part(0f, 0.59f, 0f, 0.32f, 0.16f, 0.21f, 0.08f, 0.15f, 0.20f)
 
             // Shoulder guards and arms
-            part(-0.43f, 1.13f, 0f, 0.19f, 0.18f, 0.19f, 0.72f, 0.74f, 0.69f)
-            part(0.43f, 1.13f, 0f, 0.19f, 0.18f, 0.19f, 0.72f, 0.74f, 0.69f)
-            part(-0.52f, 0.91f, 0f, 0.13f, 0.29f, 0.14f, 0.12f, 0.24f, 0.30f, 0f, 0f, -8f)
+            part(-0.43f, 1.13f, 0f, 0.19f, 0.18f, 0.19f, armorColor[0], armorColor[1], armorColor[2])
+            part(0.43f, 1.13f, 0f, 0.19f, 0.18f, 0.19f, armorColor[0], armorColor[1], armorColor[2])
+            part(-0.52f, 0.91f, 0f, 0.13f, 0.29f, 0.14f, sleeveColor[0], sleeveColor[1], sleeveColor[2], 0f, 0f, -8f)
             part(-0.57f, 0.62f, 0.01f, 0.11f, 0.25f, 0.12f, 0.88f, 0.68f, 0.57f, 0f, 0f, 5f)
             part(-0.59f, 0.38f, 0.03f, 0.12f, 0.11f, 0.11f, 0.94f, 0.73f, 0.62f)
-            part(0.52f, 0.92f, 0f, 0.13f, 0.29f, 0.14f, 0.12f, 0.24f, 0.30f, 0f, 0f, 8f + wave)
+            part(0.52f, 0.92f, 0f, 0.13f, 0.29f, 0.14f, sleeveColor[0], sleeveColor[1], sleeveColor[2], 0f, 0f, 8f + wave)
             part(0.57f, 0.64f, 0.02f, 0.11f, 0.24f, 0.12f, 0.88f, 0.68f, 0.57f, 0f, 0f, -8f - wave)
             part(0.59f, 0.40f, 0.04f, 0.12f, 0.11f, 0.11f, 0.94f, 0.73f, 0.62f)
 
