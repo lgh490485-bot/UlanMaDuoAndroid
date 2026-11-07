@@ -62,6 +62,20 @@ class OverlayService : Service() {
             x = dp(42)
             y = dp(150)
         }
+        val characterParams = character.layoutParams as FrameLayout.LayoutParams
+        val scaleDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                val newWidth = (p.width * detector.scaleFactor).toInt().coerceIn(dp(124), dp(300))
+                val newHeight = (p.height * detector.scaleFactor).toInt().coerceIn(dp(168), dp(390))
+                p.width = newWidth
+                p.height = newHeight
+                characterParams.width = (dp(164) * newWidth / dp(176)).coerceIn(dp(112), dp(280))
+                characterParams.height = (dp(208) * newHeight / dp(238)).coerceIn(dp(150), dp(360))
+                character.layoutParams = characterParams
+                try { wm.updateViewLayout(frame, p) } catch (_: Exception) { }
+                return true
+            }
+        })
         frame.setOnTouchListener(object : View.OnTouchListener {
             private var sx = 0f
             private var sy = 0f
@@ -70,6 +84,11 @@ class OverlayService : Service() {
             private var moved = false
 
             override fun onTouch(view: View, event: MotionEvent): Boolean {
+                scaleDetector.onTouchEvent(event)
+                if (scaleDetector.isInProgress || event.pointerCount > 1) {
+                    moved = true
+                    return true
+                }
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
                         sx = event.rawX; sy = event.rawY
