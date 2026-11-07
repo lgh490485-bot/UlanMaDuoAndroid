@@ -12,13 +12,15 @@ import kotlin.math.sqrt
 
 /** Minimal glTF 2.0 binary mesh renderer for the bundled/imported UlanMaDuo GLB. */
 class GlbModel private constructor(private val meshes: List<Mesh>) {
-    private data class Mesh(val vertices: FloatBuffer, val colors: FloatBuffer, val indices: ShortBuffer, val count: Int)
+    private data class Mesh(val name: String, val vertices: FloatBuffer, val colors: FloatBuffer, val indices: ShortBuffer, val count: Int, val pivotX: Float, val pivotY: Float, val pivotZ: Float)
     private var program = 0
     private var position = 0
     private var normal = 0
     private var color = 0
     private var mvp = 0
     private var model = 0
+    private val baseMatrix = FloatArray(16)
+    private val localMatrix = FloatArray(16)
     private val modelMatrix = FloatArray(16)
     private val mvpMatrix = FloatArray(16)
 
@@ -68,25 +70,31 @@ class GlbModel private constructor(private val meshes: List<Mesh>) {
 
     fun draw(view: FloatArray, projection: FloatArray, elapsedSeconds: Float, action: String) {
         if (program == 0) return
-        Matrix.setIdentityM(modelMatrix, 0)
-        // Vertex positions are converted from glTF Z-up to Android Y-up during import.
+        Matrix.setIdentityM(baseMatrix, 0)
         val breathing = kotlin.math.sin(elapsedSeconds * 2.0f) * 0.006f
-        Matrix.translateM(modelMatrix, 0, 0f, breathing, 0f)
+        Matrix.translateM(baseMatrix, 0, 0f, breathing, 0f)
         val sway = when (action) {
-            "wave" -> kotlin.math.sin(elapsedSeconds * 3.2f) * 2.2f
-            "walk" -> kotlin.math.sin(elapsedSeconds * 6.0f) * 1.4f
-            else -> kotlin.math.sin(elapsedSeconds * 1.3f) * 0.7f
+            "wave" -> kotlin.math.sin(elapsedSeconds * 3.2f) * 1.2f
+            "walk" -> kotlin.math.sin(elapsedSeconds * 6.0f) * 0.8f
+            else -> kotlin.math.sin(elapsedSeconds * 1.3f) * 0.35f
         }
-        Matrix.rotateM(modelMatrix, 0, sway, 0f, 1f, 0f)
-        Matrix.multiplyMM(mvpMatrix, 0, view, 0, modelMatrix, 0)
-        Matrix.multiplyMM(mvpMatrix, 0, projection, 0, mvpMatrix, 0)
+        Matrix.rotateM(baseMatrix, 0, sway, 0f, 1f, 0f)
         GLES20.glUseProgram(program)
-        GLES20.glUniformMatrix4fv(mvp, 1, false, mvpMatrix, 0)
-        GLES20.glUniformMatrix4fv(model, 1, false, modelMatrix, 0)
         GLES20.glEnableVertexAttribArray(position)
         GLES20.glEnableVertexAttribArray(normal)
         GLES20.glEnableVertexAttribArray(color)
+
         for (mesh in meshes) {
+            val angle = jointAngle(mesh.name, elapsedSeconds, action)
+            Matrix.setIdentityM(localMatrix, 0)
+            Matrix.translateM(localMatrix, 0, mesh.pivotX, mesh.pivotY, mesh.pivotZ)
+            if (angle != 0f) Matrix.rotateM(localMatrix, 0, angle, 0f, 0f, 1f)
+            Matrix.translateM(localMatrix, 0, -mesh.pivotX, -mesh.pivotY, -mesh.pivotZ)
+            Matrix.multiplyMM(modelMatrix, 0, baseMatrix, 0, localMatrix, 0)
+            Matrix.multiplyMM(mvpMatrix, 0, view, 0, modelMatrix, 0)
+            Matrix.multiplyMM(mvpMatrix, 0, projection, 0, mvpMatrix, 0)
+            GLES20.glUniformMatrix4fv(mvp, 1, false, mvpMatrix, 0)
+            GLES20.glUniformMatrix4fv(model, 1, false, modelMatrix, 0)
             mesh.vertices.position(0)
             GLES20.glVertexAttribPointer(position, 3, GLES20.GL_FLOAT, false, 24, mesh.vertices)
             mesh.vertices.position(3)
@@ -99,6 +107,60 @@ class GlbModel private constructor(private val meshes: List<Mesh>) {
         GLES20.glDisableVertexAttribArray(position)
         GLES20.glDisableVertexAttribArray(normal)
         GLES20.glDisableVertexAttribArray(color)
+    }
+
+    /**
+     * Name-based rigid-part rig for this authored mesh. This is procedural joint
+     * animation, not glTF skinning: each named part rotates around an authored pivot.
+     */
+    private fun jointAngle(name: String, time: Float, action: String): Float {
+        val wave = kotlin.math.sin(time * 5.0f)
+        val walk = kotlin.math.sin(time * 6.0f)
+        val isRight = name.endsWith("_R")
+        val isLeft = name.endsWith("_L")
+        if (name.startsWith("upper_arm_R") || name == "pauldron_R") {
+            return when (action) {
+                "wave" -> -58f + wave * 11f
+                "walk" -> walk * 22f
+                else -> 0f
+            }
+        }
+        if (name.startsWith("elbow_R") || name.startsWith("forearm_R") || name.startsWith("glove_R")) {
+            return when (action) {
+                "wave" -> -38f + wave * 9f
+                "walk" -> -walk * 14f
+                else -> 0f
+            }
+        }
+        if (name.startsWith("upper_arm_L") || name == "pauldron_L") {
+            return if (action == "walk") -walk * 22f else 0f
+        }
+        if (name.startsWith("elbow_L") || name.startsWith("forearm_L") || name.startsWith("glove_L")) {
+            return if (action == "walk") walk * 14f else 0f
+        }
+        if (name.startsWith("thigh_")) {
+            return when (action) {
+                "walk" -> (if (isRight) 1f else -1f) * walk * 24f
+                "sit" -> if (isRight) 68f else -68f
+                else -> 0f
+            }
+        }
+        if (name.startsWith("shin_") || name.startsWith("knee_guard_")) {
+            return when (action) {
+                "walk" -> (if (isRight) -1f else 1f) * (12f + kotlin.math.max(0f, walk) * 22f)
+                "sit" -> if (isRight) -72f else 72f
+                else -> 0f
+            }
+        }
+        if (name.startsWith("boot_")) {
+            return when (action) {
+                "walk" -> (if (isRight) -1f else 1f) * (8f + kotlin.math.max(0f, walk) * 16f)
+                "sit" -> if (isRight) -72f else 72f
+                else -> 0f
+            }
+        }
+        if (name.startsWith("long_hair_")) return kotlin.math.sin(time * 2.1f) * 1.4f * (if (isRight) 1f else -1f)
+        return 0f
     }
 
     companion object {
@@ -163,7 +225,10 @@ class GlbModel private constructor(private val meshes: List<Mesh>) {
             }
             if (meshOrder.isEmpty()) for (i in 0 until meshesJson.length()) meshOrder.add(i)
             val result = ArrayList<Mesh>()
+            val nodeNames = HashMap<Int, String>()
+            for (i in 0 until nodes.length()) { val node = nodes.getJSONObject(i); if (node.has("mesh")) nodeNames[node.getInt("mesh")] = node.optString("name", "mesh_${node.getInt("mesh")}") }
             for (meshIndex in meshOrder) {
+                val meshName = nodeNames[meshIndex] ?: "mesh_$meshIndex"
                 val primitives = meshesJson.getJSONObject(meshIndex).getJSONArray("primitives")
                 for (p in 0 until primitives.length()) {
                     val primitive = primitives.getJSONObject(p)
@@ -198,7 +263,9 @@ class GlbModel private constructor(private val meshes: List<Mesh>) {
                     val shorts = ShortArray(idx.size) { idx[it].toShort() }
                     fun directFloats(data: FloatArray): FloatBuffer = ByteBuffer.allocateDirect(data.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply { put(data); position(0) }
                     val indexBuffer = ByteBuffer.allocateDirect(shorts.size * 2).order(ByteOrder.nativeOrder()).asShortBuffer().apply { put(shorts); position(0) }
-                    result.add(Mesh(directFloats(packed), directFloats(colors), indexBuffer, shorts.size))
+                    val pivotX = when { meshName.endsWith("_R") && (meshName.startsWith("upper_arm") || meshName.startsWith("pauldron")) -> 0.39f; meshName.endsWith("_L") && (meshName.startsWith("upper_arm") || meshName.startsWith("pauldron")) -> -0.39f; meshName.endsWith("_R") && (meshName.startsWith("elbow") || meshName.startsWith("forearm") || meshName.startsWith("glove")) -> 0.47f; meshName.endsWith("_L") && (meshName.startsWith("elbow") || meshName.startsWith("forearm") || meshName.startsWith("glove")) -> -0.47f; meshName.endsWith("_R") -> 0.17f; meshName.endsWith("_L") -> -0.17f; else -> 0f }
+                    val pivotY = when { meshName.startsWith("upper_arm") || meshName.startsWith("pauldron") -> 1.53f; meshName.startsWith("elbow") || meshName.startsWith("forearm") || meshName.startsWith("glove") -> 1.25f; meshName.startsWith("thigh") -> 1.20f; meshName.startsWith("shin") || meshName.startsWith("knee_guard") || meshName.startsWith("boot") -> 0.64f; else -> 0f }
+                    result.add(Mesh(meshName, directFloats(packed), directFloats(colors), indexBuffer, shorts.size, pivotX, pivotY, 0f))
                 }
             }
             require(result.isNotEmpty()) { "GLB 中没有可显示的网格" }
