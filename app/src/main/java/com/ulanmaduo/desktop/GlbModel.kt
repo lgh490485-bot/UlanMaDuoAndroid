@@ -66,11 +66,18 @@ class GlbModel private constructor(private val meshes: List<Mesh>) {
         model = GLES20.glGetUniformLocation(program, "uModel")
     }
 
-    fun draw(view: FloatArray, projection: FloatArray) {
+    fun draw(view: FloatArray, projection: FloatArray, elapsedSeconds: Float, action: String) {
         if (program == 0) return
         Matrix.setIdentityM(modelMatrix, 0)
-        // The source character is authored Z-up; rotate it into Android's Y-up scene.
-        Matrix.rotateM(modelMatrix, 0, -90f, 1f, 0f, 0f)
+        // Vertex positions are converted from glTF Z-up to Android Y-up during import.
+        val breathing = kotlin.math.sin(elapsedSeconds * 2.0f) * 0.006f
+        Matrix.translateM(modelMatrix, 0, 0f, breathing, 0f)
+        val sway = when (action) {
+            "wave" -> kotlin.math.sin(elapsedSeconds * 3.2f) * 2.2f
+            "walk" -> kotlin.math.sin(elapsedSeconds * 6.0f) * 1.4f
+            else -> kotlin.math.sin(elapsedSeconds * 1.3f) * 0.7f
+        }
+        Matrix.rotateM(modelMatrix, 0, sway, 0f, 1f, 0f)
         Matrix.multiplyMM(mvpMatrix, 0, view, 0, modelMatrix, 0)
         Matrix.multiplyMM(mvpMatrix, 0, projection, 0, mvpMatrix, 0)
         GLES20.glUseProgram(program)
