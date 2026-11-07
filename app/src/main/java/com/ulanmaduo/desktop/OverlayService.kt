@@ -26,6 +26,13 @@ class OverlayService : Service() {
         }
     }
 
+    @Suppress("DEPRECATION")
+    private fun registerPetUpdateReceiver() {
+        val filter = IntentFilter(ACTION_UPDATE_PET)
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(petUpdates, filter, Context.RECEIVER_NOT_EXPORTED)
+        else registerReceiver(petUpdates, filter)
+    }
+
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     override fun onCreate() {
@@ -50,9 +57,7 @@ class OverlayService : Service() {
                 .build()
         )
 
-        val filter = IntentFilter(ACTION_UPDATE_PET)
-        if (Build.VERSION.SDK_INT >= 33) registerReceiver(petUpdates, filter, Context.RECEIVER_NOT_EXPORTED)
-        else @Suppress("DEPRECATION") run { registerReceiver(petUpdates, filter) }
+        registerPetUpdateReceiver()
 
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         val frame = FrameLayout(this)
