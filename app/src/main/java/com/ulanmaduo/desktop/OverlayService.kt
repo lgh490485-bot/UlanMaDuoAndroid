@@ -43,6 +43,7 @@ class OverlayService : Service() {
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         val frame = FrameLayout(this)
         val character = Character3DView(this)
+        character.setCasualMode(getSharedPreferences("ulan_maduo", MODE_PRIVATE).getBoolean("casual_outfit", false))
         frame.addView(character, FrameLayout.LayoutParams(dp(164), dp(208), Gravity.CENTER))
         val caption = TextView(this).apply {
             text = "乌兰麦朵"
