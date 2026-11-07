@@ -140,7 +140,14 @@ class GlbModel private constructor(private val meshes: List<Mesh>, private val j
                 "hair_R" -> -kotlin.math.sin(time*2.1f)*2f
                 else -> 0f
             }
-            if (angle != 0f) Matrix.rotateM(jointLocal, 0, angle, 0f, 0f, 1f)
+            // Rotate around anatomically appropriate axes in the converted Y-up space.
+            if (angle != 0f) {
+                when (j.name) {
+                    "thigh_R", "thigh_L", "shin_R", "shin_L", "head", "hair_L", "hair_R" ->
+                        Matrix.rotateM(jointLocal, 0, angle, 1f, 0f, 0f)
+                    else -> Matrix.rotateM(jointLocal, 0, angle, 0f, 0f, 1f)
+                }
+            }
             val off = i * 16
             if (j.parent >= 0) {
                 System.arraycopy(jointGlobals, j.parent * 16, jointParent, 0, 16)
@@ -306,8 +313,32 @@ class GlbModel private constructor(private val meshes: List<Mesh>, private val j
                     tr?.optDouble(1, 0.0)?.toFloat() ?: 0f,
                     tr?.optDouble(2, 0.0)?.toFloat() ?: 0f))
             }
-            val inverseBind = if (skins != null && skins.length() > 0 && skins.getJSONObject(0).has("inverseBindMatrices"))
-                floatData(skins.getJSONObject(0).getInt("inverseBindMatrices"), 16) else FloatArray(0)
+            // Convert joint translations and inverse-bind matrices from source Z-up
+            // into the renderer's Y-up basis: (x, y, z) -> (x, z, -y).
+            for (i in rig.indices) {
+                val j = rig[i]
+                rig[i] = j.copy(tx = j.tx, ty = j.tz, tz = -j.ty)
+            }
+            val inverseBind = if (skins != null && skins.length() > 0 && skins.getJSONObject(0).has("inverseBindMatrices")) {
+                val source = floatData(skins.getJSONObject(0).getInt("inverseBindMatrices"), 16)
+                val c = FloatArray(16)
+                Matrix.setIdentityM(c, 0)
+                c[5] = 0f; c[6] = -1f; c[9] = 1f; c[10] = 0f
+                val invC = FloatArray(16)
+                Matrix.setIdentityM(invC, 0)
+                invC[5] = 0f; invC[6] = 1f; invC[9] = -1f; invC[10] = 0f
+                val converted = FloatArray(source.size)
+                val tempMatrix = FloatArray(16)
+                val resultMatrix = FloatArray(16)
+                for (i in rig.indices) {
+                    val offset = i * 16
+                    val matrix = source.copyOfRange(offset, offset + 16)
+                    Matrix.multiplyMM(tempMatrix, 0, c, 0, matrix, 0)
+                    Matrix.multiplyMM(resultMatrix, 0, tempMatrix, 0, invC, 0)
+                    System.arraycopy(resultMatrix, 0, converted, offset, 16)
+                }
+                converted
+            } else FloatArray(0)
             val meshOrder = ArrayList<Int>()
             for (i in 0 until nodes.length()) {
                 val node = nodes.getJSONObject(i)
