@@ -138,7 +138,6 @@ class Character3DView(context: Context) : GLSurfaceView(context) {
             GLES20.glVertexAttribPointer(pos, 3, GLES20.GL_FLOAT, false, 24, vertices)
             vertices.position(3)
             GLES20.glVertexAttribPointer(normal, 3, GLES20.GL_FLOAT, false, 24, vertices)
-            val t = (System.nanoTime() - start) / 1_000_000_000.0
             val breath = 1f + 0.012f * sin(t * 2.0).toFloat()
             val currentAction = action
             val wave = if (currentAction == "wave") (sin(t * 5.0) * 24.0).toFloat() else (sin(t * 1.7) * 5.0).toFloat()
