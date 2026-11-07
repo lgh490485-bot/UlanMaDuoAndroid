@@ -15,6 +15,8 @@ import android.widget.*
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
+import java.io.File
+import java.io.FileOutputStream
 
 class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var tts: TextToSpeech? = null
@@ -60,6 +62,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         avatar = Character3DView(this)
         avatar.setCasualMode(prefs.getBoolean("casual_outfit", false))
         avatar.setAction(prefs.getString("character_action", "idle") ?: "idle")
+        prefs.getString("model_path", null)?.let { if (File(it).exists()) avatar.setModelFile(it) }
         root.addView(avatar, LinearLayout.LayoutParams(-1, dp(250)))
         val actionRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         listOf("待机" to "idle", "挥手" to "wave", "走动" to "walk", "坐下" to "sit").forEach { (label, action) ->
@@ -84,6 +87,10 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 text = if (next) "切换战斗服" else "切换日常服"
                 Toast.makeText(this@MainActivity, if (next) "已换上日常服" else "已换上战斗服", Toast.LENGTH_SHORT).show()
             }
+        })
+        root.addView(Button(this).apply {
+            text = "导入乌兰麦朵 GLB 3D 模型"
+            setOnClickListener { pickCharacterModel() }
         })
 
         scroll = ScrollView(this)
@@ -280,6 +287,34 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         addBubble("乌兰麦朵", "记录清空了。我们重新开始。")
     }
 
+
+    private fun pickCharacterModel() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("model/gltf-binary", "application/octet-stream"))
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivityForResult(intent, 10)
+    }
+
+    private fun importCharacterModel(uri: Uri) {
+        try {
+            val target = File(filesDir, "ulan_character.glb")
+            contentResolver.openInputStream(uri).use { input ->
+                requireNotNull(input) { "无法读取所选文件" }
+                FileOutputStream(target).use { output -> input.copyTo(output) }
+            }
+            require(target.length() > 20 && target.inputStream().use { it.read() } == 0x67) { "所选文件不是有效 GLB" }
+            prefs.edit().putString("model_path", target.absolutePath).apply()
+            avatar.setModelFile(target.absolutePath)
+            sendBroadcast(Intent(OverlayService.ACTION_UPDATE_PET).putExtra("model_path", target.absolutePath))
+            Toast.makeText(this, "3D 模型已导入，桌宠已切换为独立网格模型", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "模型导入失败：" + (e.message ?: "文件格式不正确"), Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun startVoiceInput() {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
@@ -321,6 +356,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     @Deprecated("Deprecated in Android")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 10 && resultCode == RESULT_OK) data?.data?.let { importCharacterModel(it) }
         if (requestCode == 9 && resultCode == RESULT_OK) {
             val spoken = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
             input.setText(spoken)
