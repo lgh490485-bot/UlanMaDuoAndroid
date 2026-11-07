@@ -77,6 +77,8 @@ class GlbModel private constructor(private val meshes: List<Mesh>, private val j
     fun draw(view: FloatArray, projection: FloatArray, elapsedSeconds: Float, action: String) {
         if (program == 0) return
         Matrix.setIdentityM(baseMatrix, 0)
+        // Face the preview camera: authored model front is oriented toward -Z.
+        Matrix.rotateM(baseMatrix, 0, 180f, 0f, 1f, 0f)
         val breathing = kotlin.math.sin(elapsedSeconds * 2.0f) * 0.006f
         Matrix.translateM(baseMatrix, 0, 0f, breathing, 0f)
         val sway = when (action) {
