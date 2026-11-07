@@ -129,7 +129,8 @@ class Character3DView(context: Context) : GLSurfaceView(context) {
 
         override fun onDrawFrame(gl: GL10?) {
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
-            glbModel?.let { it.draw(view, projection); return }
+            val t = (System.nanoTime() - start) / 1_000_000_000.0
+            glbModel?.let { it.draw(view, projection, t.toFloat(), action); return }
             GLES20.glUseProgram(program)
             vertices.position(0)
             GLES20.glEnableVertexAttribArray(pos)
