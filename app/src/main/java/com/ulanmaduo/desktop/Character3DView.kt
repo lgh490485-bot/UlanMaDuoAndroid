@@ -20,6 +20,11 @@ class Character3DView(context: Context) : GLSurfaceView(context) {
         requestRender()
     }
 
+    fun setAction(action: String) {
+        characterRenderer.action = action
+        requestRender()
+    }
+
     init {
         setEGLContextClientVersion(2)
         setRenderer(characterRenderer)
@@ -44,6 +49,7 @@ class Character3DView(context: Context) : GLSurfaceView(context) {
         private val temp = FloatArray(16)
         private var start = System.nanoTime()
         @Volatile var casualMode: Boolean = false
+        @Volatile var action: String = "idle"
 
         override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
             GLES20.glClearColor(0.94f, 0.91f, 0.86f, 1f)
@@ -116,7 +122,14 @@ class Character3DView(context: Context) : GLSurfaceView(context) {
             GLES20.glVertexAttribPointer(normal, 3, GLES20.GL_FLOAT, false, 24, vertices)
             val t = (System.nanoTime() - start) / 1_000_000_000.0
             val breath = 1f + 0.012f * sin(t * 2.0).toFloat()
-            val wave = (sin(t * 1.7) * 5.0).toFloat()
+            val currentAction = action
+            val wave = if (currentAction == "wave") (sin(t * 5.0) * 24.0).toFloat() else (sin(t * 1.7) * 5.0).toFloat()
+            val walk = if (currentAction == "walk") sin(t * 7.0).toFloat() * 18f else 0f
+            val sitting = currentAction == "sit"
+            val leftLegY = if (sitting) 0.10f else 0.27f
+            val rightLegY = if (sitting) 0.10f else 0.27f
+            val leftLegZ = if (sitting) 62f else walk
+            val rightLegZ = if (sitting) -62f else -walk
             val blinkPhase = (t % 4.3)
             val blink = if (blinkPhase > 3.92 && blinkPhase < 4.08) 0.18f else 1f
             val casual = casualMode
@@ -149,18 +162,18 @@ class Character3DView(context: Context) : GLSurfaceView(context) {
             // Shoulder guards and arms
             part(-0.43f, 1.13f, 0f, 0.19f, 0.18f, 0.19f, armorColor[0], armorColor[1], armorColor[2])
             part(0.43f, 1.13f, 0f, 0.19f, 0.18f, 0.19f, armorColor[0], armorColor[1], armorColor[2])
-            part(-0.52f, 0.91f, 0f, 0.13f, 0.29f, 0.14f, sleeveColor[0], sleeveColor[1], sleeveColor[2], 0f, 0f, -8f)
+            part(-0.52f, 0.91f, 0f, 0.13f, 0.29f, 0.14f, sleeveColor[0], sleeveColor[1], sleeveColor[2], 0f, 0f, if (currentAction == "walk") -8f - walk else -8f)
             part(-0.57f, 0.62f, 0.01f, 0.11f, 0.25f, 0.12f, 0.88f, 0.68f, 0.57f, 0f, 0f, 5f)
             part(-0.59f, 0.38f, 0.03f, 0.12f, 0.11f, 0.11f, 0.94f, 0.73f, 0.62f)
-            part(0.52f, 0.92f, 0f, 0.13f, 0.29f, 0.14f, sleeveColor[0], sleeveColor[1], sleeveColor[2], 0f, 0f, 8f + wave)
-            part(0.57f, 0.64f, 0.02f, 0.11f, 0.24f, 0.12f, 0.88f, 0.68f, 0.57f, 0f, 0f, -8f - wave)
+            part(0.52f, 0.92f, 0f, 0.13f, 0.29f, 0.14f, sleeveColor[0], sleeveColor[1], sleeveColor[2], 0f, 0f, if (currentAction == "wave") -55f + wave else if (currentAction == "walk") 8f + walk else 8f)
+            part(0.57f, 0.64f, 0.02f, 0.11f, 0.24f, 0.12f, 0.88f, 0.68f, 0.57f, 0f, 0f, if (currentAction == "wave") -55f + wave else if (currentAction == "walk") -8f - walk else -8f)
             part(0.59f, 0.40f, 0.04f, 0.12f, 0.11f, 0.11f, 0.94f, 0.73f, 0.62f)
 
             // Legs and boots
-            part(-0.18f, 0.27f, 0f, 0.17f, 0.38f, 0.17f, 0.10f, 0.19f, 0.24f, 0f, 0f, 2f)
-            part(0.18f, 0.27f, 0f, 0.17f, 0.38f, 0.17f, 0.10f, 0.19f, 0.24f, 0f, 0f, -2f)
-            part(-0.18f, -0.08f, 0.06f, 0.19f, 0.15f, 0.28f, 0.08f, 0.11f, 0.14f)
-            part(0.18f, -0.08f, 0.06f, 0.19f, 0.15f, 0.28f, 0.08f, 0.11f, 0.14f)
+            part(if (sitting) -0.34f else -0.18f, leftLegY, if (sitting) 0.08f else 0f, 0.17f, 0.38f, 0.17f, 0.10f, 0.19f, 0.24f, 0f, 0f, leftLegZ)
+            part(if (sitting) 0.34f else 0.18f, rightLegY, if (sitting) 0.08f else 0f, 0.17f, 0.38f, 0.17f, 0.10f, 0.19f, 0.24f, 0f, 0f, rightLegZ)
+            part(if (sitting) -0.52f else -0.18f, if (sitting) -0.02f else -0.08f, 0.12f, 0.19f, 0.15f, 0.28f, 0.08f, 0.11f, 0.14f)
+            part(if (sitting) 0.52f else 0.18f, if (sitting) -0.02f else -0.08f, 0.12f, 0.19f, 0.15f, 0.28f, 0.08f, 0.11f, 0.14f)
 
             GLES20.glDisableVertexAttribArray(pos)
             GLES20.glDisableVertexAttribArray(normal)

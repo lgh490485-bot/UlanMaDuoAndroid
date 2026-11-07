@@ -59,7 +59,20 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
         avatar = Character3DView(this)
         avatar.setCasualMode(prefs.getBoolean("casual_outfit", false))
+        avatar.setAction(prefs.getString("character_action", "idle") ?: "idle")
         root.addView(avatar, LinearLayout.LayoutParams(-1, dp(250)))
+        val actionRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf("待机" to "idle", "挥手" to "wave", "走动" to "walk", "坐下" to "sit").forEach { (label, action) ->
+            actionRow.addView(Button(this).apply {
+                text = label
+                setOnClickListener {
+                    prefs.edit().putString("character_action", action).apply()
+                    avatar.setAction(action)
+                    Toast.makeText(this@MainActivity, "动作：$label", Toast.LENGTH_SHORT).show()
+                }
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        root.addView(actionRow)
         root.addView(Button(this).apply {
             text = if (prefs.getBoolean("casual_outfit", false)) "切换战斗服" else "切换日常服"
             setOnClickListener {
