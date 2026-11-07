@@ -24,6 +24,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var scroll: ScrollView
     private lateinit var status: TextView
     private lateinit var root: LinearLayout
+    private lateinit var avatar: Character3DView
     private val prefs by lazy { getSharedPreferences("ulan_maduo", MODE_PRIVATE) }
     private val history by lazy { JSONArray(prefs.getString("history", "[]")) }
 
@@ -56,8 +57,19 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
         root.addView(status)
 
-        val avatar = Character3DView(this)
+        avatar = Character3DView(this)
+        avatar.setCasualMode(prefs.getBoolean("casual_outfit", false))
         root.addView(avatar, LinearLayout.LayoutParams(-1, dp(250)))
+        root.addView(Button(this).apply {
+            text = if (prefs.getBoolean("casual_outfit", false)) "切换战斗服" else "切换日常服"
+            setOnClickListener {
+                val next = !prefs.getBoolean("casual_outfit", false)
+                prefs.edit().putBoolean("casual_outfit", next).apply()
+                avatar.setCasualMode(next)
+                text = if (next) "切换战斗服" else "切换日常服"
+                Toast.makeText(this@MainActivity, if (next) "已换上日常服" else "已换上战斗服", Toast.LENGTH_SHORT).show()
+            }
+        })
 
         scroll = ScrollView(this)
         chat = LinearLayout(this).apply {
