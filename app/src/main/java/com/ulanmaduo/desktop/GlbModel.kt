@@ -18,7 +18,7 @@ class GlbModel private constructor(private val meshes: List<Mesh>, private val j
     private val jointLocal = FloatArray(16)
     private val jointTemp = FloatArray(16)
     private val jointParent = FloatArray(16)
-    private data class Mesh(val name: String, val vertices: FloatBuffer, val colors: FloatBuffer, val indices: ShortBuffer, val count: Int, val pivotX: Float, val pivotY: Float, val pivotZ: Float, val base: FloatArray, val jointIds: FloatArray, val weights: FloatArray)
+    private data class Mesh(val name: String, val vertices: FloatBuffer, val colors: FloatBuffer, val indices: ShortBuffer, val count: Int, val pivotX: Float, val pivotY: Float, val pivotZ: Float, val base: FloatArray, val jointIds: FloatArray, val weights: FloatArray, val deformed: FloatArray = FloatArray(base.size))
     private var program = 0
     private var position = 0
     private var normal = 0
@@ -92,7 +92,7 @@ class GlbModel private constructor(private val meshes: List<Mesh>, private val j
         GLES20.glEnableVertexAttribArray(color)
 
         for (mesh in meshes) {
-            val angle = jointAngle(mesh.name, elapsedSeconds, action)
+            val angle = if (joints.isEmpty()) jointAngle(mesh.name, elapsedSeconds, action) else 0f
             Matrix.setIdentityM(localMatrix, 0)
             Matrix.translateM(localMatrix, 0, mesh.pivotX, mesh.pivotY, mesh.pivotZ)
             if (angle != 0f) Matrix.rotateM(localMatrix, 0, angle, 0f, 0f, 1f)
@@ -150,7 +150,7 @@ class GlbModel private constructor(private val meshes: List<Mesh>, private val j
             Matrix.multiplyMM(skinMatrices, off, jointGlobals, off, inverseBind, off)
         }
         for (mesh in meshes) {
-            val out = FloatArray(mesh.base.size)
+            val out = mesh.deformed
             for (v in 0 until mesh.base.size / 6) {
                 val px=mesh.base[v*6]; val py=mesh.base[v*6+1]; val pz=mesh.base[v*6+2]
                 val nx=mesh.base[v*6+3]; val ny=mesh.base[v*6+4]; val nz=mesh.base[v*6+5]
