@@ -1,61 +1,69 @@
 package com.ulanmaduo.desktop
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
-import android.view.Gravity
+import android.speech.tts.Voice
+import android.text.InputType
 import android.view.ViewGroup
 import android.widget.*
 import org.json.JSONArray
 import org.json.JSONObject
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
 class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var tts: TextToSpeech? = null
+    private lateinit var ai: DeepSeekClient
     private lateinit var chat: LinearLayout
     private lateinit var input: EditText
     private lateinit var scroll: ScrollView
+    private lateinit var status: TextView
+    private lateinit var root: LinearLayout
     private val prefs by lazy { getSharedPreferences("ulan_maduo", MODE_PRIVATE) }
     private val history by lazy { JSONArray(prefs.getString("history", "[]")) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ai = DeepSeekClient(this)
         tts = TextToSpeech(this, this)
         buildScreen()
         restoreHistory()
+        refreshStatus()
     }
 
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
     private fun buildScreen() {
-        val root = LinearLayout(this).apply {
+        root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(22, 28, 22, 18)
+            setPadding(dp(16), dp(18), dp(16), dp(12))
             setBackgroundColor(0xFFF4F0E8.toInt())
         }
         root.addView(TextView(this).apply {
             text = "乌兰麦朵"
-            textSize = 30f
+            textSize = 28f
             setTextColor(0xFF382D27.toInt())
         })
-        root.addView(TextView(this).apply {
-            text = "桌面伙伴 · 0.2.0 开发版"
-            textSize = 13f
-            setTextColor(0xFF76685D.toInt())
-        })
-        root.addView(TextView(this).apply {
-            text = "本地陪伴模式 · 聊天记录保存在本机"
+        status = TextView(this).apply {
             textSize = 12f
             setTextColor(0xFF76685D.toInt())
-            setPadding(0, 8, 0, 8)
-        })
+            setPadding(0, dp(4), 0, dp(6))
+        }
+        root.addView(status)
+
+        val avatar = Character3DView(this)
+        root.addView(avatar, LinearLayout.LayoutParams(-1, dp(250)))
 
         scroll = ScrollView(this)
-        chat = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 12, 0, 12) }
+        chat = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(10), 0, dp(8))
+        }
         scroll.addView(chat)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
@@ -77,6 +85,17 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }, LinearLayout.LayoutParams(0, -2, 1f))
         root.addView(sendRow)
 
+        val configRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        configRow.addView(Button(this).apply {
+            text = "设置 DeepSeek"
+            setOnClickListener { showApiKeyDialog() }
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        configRow.addView(Button(this).apply {
+            text = "选择甜美女声"
+            setOnClickListener { showVoicePicker() }
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        root.addView(configRow)
+
         val overlayRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         overlayRow.addView(Button(this).apply {
             text = "开启悬浮桌宠"
@@ -97,9 +116,75 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         setContentView(root)
     }
 
+    private fun refreshStatus() {
+        status.text = if (ai.hasKey()) {
+            "DeepSeek 已配置 · 对话通过网络请求 · 密钥加密保存在本机"
+        } else {
+            "3D 角色预览 · 请点“设置 DeepSeek”填入你自己的 API Key"
+        }
+    }
+
+    private fun showApiKeyDialog() {
+        val field = EditText(this).apply {
+            hint = "sk-..."
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+        }
+        val wrap = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), 0)
+            addView(field)
+            addView(TextView(this@MainActivity).apply {
+                text = "密钥只保存在本机 Android Keystore 加密存储中，不会写入 GitHub。"
+                textSize = 12f
+                setTextColor(0xFF76685D.toInt())
+            })
+        }
+        AlertDialog.Builder(this)
+            .setTitle("配置 DeepSeek API Key")
+            .setView(wrap)
+            .setPositiveButton("加密保存") { _, _ ->
+                val value = field.text.toString().trim()
+                if (value.isNotEmpty()) {
+                    SecureKeyStore.save(this, value)
+                    refreshStatus()
+                    Toast.makeText(this, "API Key 已加密保存", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNeutralButton("清除密钥") { _, _ ->
+                SecureKeyStore.clear(this)
+                refreshStatus()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun showVoicePicker() {
+        val engine = tts ?: return
+        val voices = engine.voices?.filter { it.locale.language == "zh" }?.sortedBy { it.name }.orEmpty()
+        if (voices.isEmpty()) {
+            Toast.makeText(this, "系统暂未提供中文 TTS 声音，请安装中文语音包", Toast.LENGTH_LONG).show()
+            return
+        }
+        val names = voices.map { voice ->
+            val quality = if (voice.quality >= Voice.QUALITY_HIGH) "高音质" else "标准"
+            "${voice.name} · $quality"
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("选择中文声音（已调整为柔和语速和音调）")
+            .setItems(names) { _, which ->
+                engine.voice = voices[which]
+                prefs.edit().putString("tts_voice", voices[which].name).apply()
+                engine.setPitch(1.16f)
+                engine.setSpeechRate(0.92f)
+                Toast.makeText(this, "已切换声音：${voices[which].name}", Toast.LENGTH_SHORT).show()
+            }
+            .show()
+    }
+
     private fun restoreHistory() {
         if (history.length() == 0) {
-            addBubble("乌兰麦朵", "我在。你可以和我说说今天的事，也可以把我放到桌面陪着你。")
+            addBubble("乌兰麦朵", "我在。现在可以看见我的 3D 形象了。把 DeepSeek 密钥配置好，我们就能真正聊天。")
             return
         }
         for (i in 0 until history.length()) {
@@ -113,9 +198,32 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         if (message.isEmpty()) return
         input.text.clear()
         append("你", message)
-        val reply = localReply(message)
-        append("乌兰麦朵", reply)
-        tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "ulan_reply")
+        if (!ai.hasKey()) {
+            append("乌兰麦朵", "先把 DeepSeek API Key 配置好，我就能认真回答你啦。")
+            showApiKeyDialog()
+            return
+        }
+        status.text = "乌兰麦朵正在思考…"
+        ai.send(history) { reply, error ->
+            runOnUiThread {
+                if (reply != null) {
+                    append("乌兰麦朵", reply)
+                    speak(reply)
+                    refreshStatus()
+                } else {
+                    append("系统提示", error ?: "请求失败，请检查网络和 API Key")
+                    refreshStatus()
+                }
+            }
+        }
+    }
+
+    private fun speak(text: String) {
+        tts?.let {
+            it.setPitch(1.16f)
+            it.setSpeechRate(0.92f)
+            it.speak(text, TextToSpeech.QUEUE_FLUSH, null, "ulan_reply")
+        }
     }
 
     private fun append(role: String, text: String) {
@@ -129,46 +237,20 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private fun addBubble(role: String, text: String) {
         val view = TextView(this).apply {
             this.text = "$role：$text"
-            textSize = 16f
+            textSize = 15f
             setTextColor(if (role == "你") 0xFF4C514E.toInt() else 0xFF382D27.toInt())
             setBackgroundColor(if (role == "你") 0xFFE5E8E3.toInt() else 0xFFE9DFD2.toInt())
-            setPadding(16, 12, 16, 12)
+            setPadding(dp(14), dp(10), dp(14), dp(10))
         }
-        val lp = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 10 }
+        val lp = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) }
         chat.addView(view, lp)
     }
 
     private fun historyClear() {
-        historyClearInternal()
-        chat.removeAllViews()
-        addBubble("乌兰麦朵", "记录清空了。我们重新开始。")
-    }
-
-    private fun historyClearInternal() {
         while (history.length() > 0) history.remove(0)
         prefs.edit().remove("history").apply()
-    }
-
-    private fun localReply(message: String): String {
-        val m = message.lowercase(Locale.ROOT)
-        return when {
-            listOf("你好", "嗨", "在吗", "早上好", "晚上好").any { m.contains(it) } ->
-                "我在这里。见到你，我很高兴。今天想从什么事情聊起？"
-            listOf("谢谢", "感谢").any { m.contains(it) } ->
-                "不用客气。能帮上你，我就安心了。"
-            listOf("再见", "晚安", "睡觉").any { m.contains(it) } ->
-                "好好休息吧。我会在这里等你回来。"
-            listOf("你是谁", "介绍一下").any { m.contains(it) } ->
-                "我是乌兰麦朵，你的桌面伙伴。现在运行的是本地基础陪伴模式。"
-            listOf("时间", "几点").any { m.contains(it) } ->
-                "现在是 " + SimpleDateFormat("HH:mm", Locale.CHINA).format(Date()) + "。"
-            listOf("难过", "伤心", "压力", "烦").any { m.contains(it) } ->
-                "先别急着一个人扛着。愿意的话，告诉我发生了什么，我会认真听。"
-            listOf("开心", "高兴", "成功").any { m.contains(it) } ->
-                "听起来是件好事。把这份开心记住吧，也和我分享一点细节。"
-            else ->
-                "我听见了。现在的版本使用本地基础对话策略，还没有接入完整离线大模型；你可以继续告诉我，我会把这段对话保存在本机。"
-        }
+        chat.removeAllViews()
+        addBubble("乌兰麦朵", "记录清空了。我们重新开始。")
     }
 
     private fun startVoiceInput() {
@@ -193,11 +275,18 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         Toast.makeText(this, "悬浮桌宠已启动", Toast.LENGTH_SHORT).show()
     }
 
-    override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) {
-            val result = tts?.setLanguage(Locale.SIMPLIFIED_CHINESE)
-            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                runOnUiThread { Toast.makeText(this, "系统未安装中文语音包，请在系统设置中安装", Toast.LENGTH_LONG).show() }
+    override fun onInit(result: Int) {
+        if (result == TextToSpeech.SUCCESS) {
+            tts?.let { engine ->
+                engine.setLanguage(Locale.SIMPLIFIED_CHINESE)
+                engine.setPitch(1.16f)
+                engine.setSpeechRate(0.92f)
+                val saved = prefs.getString("tts_voice", null)
+                val available = engine.voices.orEmpty()
+                val selected = available.firstOrNull { it.name == saved }
+                    ?: available.firstOrNull { it.locale.language == "zh" && it.name.contains("female", true) }
+                    ?: available.firstOrNull { it.locale.language == "zh" }
+                if (selected != null) engine.voice = selected
             }
         }
     }
@@ -213,6 +302,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     override fun onDestroy() {
+        ai.close()
         tts?.stop()
         tts?.shutdown()
         super.onDestroy()
