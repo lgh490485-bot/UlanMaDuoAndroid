@@ -11,8 +11,14 @@ import java.nio.ShortBuffer
 import kotlin.math.sqrt
 
 /** Minimal glTF 2.0 binary mesh renderer for the bundled/imported UlanMaDuo GLB. */
-class GlbModel private constructor(private val meshes: List<Mesh>) {
-    private data class Mesh(val name: String, val vertices: FloatBuffer, val colors: FloatBuffer, val indices: ShortBuffer, val count: Int, val pivotX: Float, val pivotY: Float, val pivotZ: Float)
+class GlbModel private constructor(private val meshes: List<Mesh>, private val joints: List<Joint>, private val inverseBind: FloatArray) {
+    private data class Joint(val name: String, val parent: Int, val tx: Float, val ty: Float, val tz: Float)
+    private val jointGlobals = FloatArray(joints.size * 16)
+    private val skinMatrices = FloatArray(joints.size * 16)
+    private val jointLocal = FloatArray(16)
+    private val jointTemp = FloatArray(16)
+    private val jointParent = FloatArray(16)
+    private data class Mesh(val name: String, val vertices: FloatBuffer, val colors: FloatBuffer, val indices: ShortBuffer, val count: Int, val pivotX: Float, val pivotY: Float, val pivotZ: Float, val base: FloatArray, val jointIds: FloatArray, val weights: FloatArray)
     private var program = 0
     private var position = 0
     private var normal = 0
@@ -79,6 +85,7 @@ class GlbModel private constructor(private val meshes: List<Mesh>) {
             else -> kotlin.math.sin(elapsedSeconds * 1.3f) * 0.35f
         }
         Matrix.rotateM(baseMatrix, 0, sway, 0f, 1f, 0f)
+        updateSkin(elapsedSeconds, action)
         GLES20.glUseProgram(program)
         GLES20.glEnableVertexAttribArray(position)
         GLES20.glEnableVertexAttribArray(normal)
@@ -107,6 +114,67 @@ class GlbModel private constructor(private val meshes: List<Mesh>) {
         GLES20.glDisableVertexAttribArray(position)
         GLES20.glDisableVertexAttribArray(normal)
         GLES20.glDisableVertexAttribArray(color)
+    }
+
+
+    /** True glTF vertex skinning using four weighted joints per vertex. */
+    private fun updateSkin(time: Float, action: String) {
+        if (joints.isEmpty()) return
+        for (i in joints.indices) {
+            val j = joints[i]
+            Matrix.setIdentityM(jointLocal, 0)
+            Matrix.translateM(jointLocal, 0, j.tx, j.ty, j.tz)
+            val gait = kotlin.math.sin(time * 6f)
+            val wave = kotlin.math.sin(time * 5f)
+            val angle = when (j.name) {
+                "upper_arm_R" -> if (action == "wave") -58f + wave * 11f else if (action == "walk") gait * 22f else 0f
+                "forearm_R" -> if (action == "wave") -38f + wave * 9f else if (action == "walk") -gait * 14f else 0f
+                "upper_arm_L" -> if (action == "walk") -gait * 22f else 0f
+                "forearm_L" -> if (action == "walk") gait * 14f else 0f
+                "thigh_R" -> if (action == "sit") 68f else if (action == "walk") gait * 24f else 0f
+                "thigh_L" -> if (action == "sit") -68f else if (action == "walk") -gait * 24f else 0f
+                "shin_R" -> if (action == "sit") -72f else if (action == "walk") -(12f + kotlin.math.max(0f,gait)*22f) else 0f
+                "shin_L" -> if (action == "sit") 72f else if (action == "walk") 12f + kotlin.math.max(0f,gait)*22f else 0f
+                "head" -> kotlin.math.sin(time*1.2f)*1.2f
+                "hair_L" -> kotlin.math.sin(time*2.1f)*2f
+                "hair_R" -> -kotlin.math.sin(time*2.1f)*2f
+                else -> 0f
+            }
+            if (angle != 0f) Matrix.rotateM(jointLocal, 0, angle, 0f, 0f, 1f)
+            val off = i * 16
+            if (j.parent >= 0) {
+                System.arraycopy(jointGlobals, j.parent * 16, jointParent, 0, 16)
+                Matrix.multiplyMM(jointTemp, 0, jointParent, 0, jointLocal, 0)
+                System.arraycopy(jointTemp, 0, jointGlobals, off, 16)
+            } else System.arraycopy(jointLocal, 0, jointGlobals, off, 16)
+            Matrix.multiplyMM(skinMatrices, off, jointGlobals, off, inverseBind, off)
+        }
+        for (mesh in meshes) {
+            val out = FloatArray(mesh.base.size)
+            for (v in 0 until mesh.base.size / 6) {
+                val px=mesh.base[v*6]; val py=mesh.base[v*6+1]; val pz=mesh.base[v*6+2]
+                val nx=mesh.base[v*6+3]; val ny=mesh.base[v*6+4]; val nz=mesh.base[v*6+5]
+                var x=0f; var y=0f; var z=0f; var ox=0f; var oy=0f; var oz=0f
+                for (k in 0..3) {
+                    val w=mesh.weights[v*4+k]
+                    if (w <= 0f) continue
+                    val jo=mesh.jointIds[v*4+k].toInt().coerceIn(0,joints.size-1)*16
+                    val m=skinMatrices
+                    x+=(m[jo]*px+m[jo+4]*py+m[jo+8]*pz+m[jo+12])*w
+                    y+=(m[jo+1]*px+m[jo+5]*py+m[jo+9]*pz+m[jo+13])*w
+                    z+=(m[jo+2]*px+m[jo+6]*py+m[jo+10]*pz+m[jo+14])*w
+                    ox+=(m[jo]*nx+m[jo+4]*ny+m[jo+8]*nz)*w
+                    oy+=(m[jo+1]*nx+m[jo+5]*ny+m[jo+9]*nz)*w
+                    oz+=(m[jo+2]*nx+m[jo+6]*ny+m[jo+10]*nz)*w
+                }
+                out[v*6]=x; out[v*6+1]=y; out[v*6+2]=z
+                val len=sqrt(ox*ox+oy*oy+oz*oz).coerceAtLeast(0.00001f)
+                out[v*6+3]=ox/len; out[v*6+4]=oy/len; out[v*6+5]=oz/len
+            }
+            mesh.vertices.position(0)
+            mesh.vertices.put(out)
+            mesh.vertices.position(0)
+        }
     }
 
     /**
