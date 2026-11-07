@@ -12,6 +12,8 @@ import android.speech.tts.Voice
 import android.text.InputType
 import android.view.ViewGroup
 import android.widget.*
+import android.view.Gravity
+import android.graphics.Color
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
@@ -27,6 +29,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var status: TextView
     private lateinit var root: LinearLayout
     private lateinit var avatar: Character3DView
+    private lateinit var modelPlaceholder: TextView
     private val prefs by lazy { getSharedPreferences("ulan_maduo", MODE_PRIVATE) }
     private val history by lazy { JSONArray(prefs.getString("history", "[]")) }
 
@@ -59,11 +62,23 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
         root.addView(status)
 
+        val preview = FrameLayout(this)
         avatar = Character3DView(this)
         avatar.setCasualMode(prefs.getBoolean("casual_outfit", false))
         avatar.setAction(prefs.getString("character_action", "idle") ?: "idle")
-        prefs.getString("model_path", null)?.let { if (File(it).exists()) avatar.setModelFile(it) }
-        root.addView(avatar, LinearLayout.LayoutParams(-1, dp(250)))
+        val savedModel = prefs.getString("model_path", null)?.takeIf { File(it).exists() }
+        if (savedModel != null) avatar.setModelFile(savedModel)
+        preview.addView(avatar, FrameLayout.LayoutParams(-1, -1))
+        modelPlaceholder = TextView(this).apply {
+            text = "尚未导入 3D 模型\\n点击下方「导入 GLB 3D 模型」选择你自己的角色"
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setTextColor(0xFF776F68.toInt())
+            setBackgroundColor(0xFFF0E9DE.toInt())
+            visibility = if (savedModel == null) View.VISIBLE else View.GONE
+        }
+        preview.addView(modelPlaceholder, FrameLayout.LayoutParams(-1, -1))
+        root.addView(preview, LinearLayout.LayoutParams(-1, dp(250)))
         val actionRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         listOf("待机" to "idle", "挥手" to "wave", "走动" to "walk", "坐下" to "sit").forEach { (label, action) ->
             actionRow.addView(Button(this).apply {
@@ -89,7 +104,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             }
         })
         root.addView(Button(this).apply {
-            text = "导入乌兰麦朵 GLB 3D 模型"
+            text = "导入自己的 GLB 3D 模型"
             setOnClickListener { pickCharacterModel() }
         })
 
@@ -308,6 +323,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             require(target.length() > 20 && target.inputStream().use { it.read() } == 0x67) { "所选文件不是有效 GLB" }
             prefs.edit().putString("model_path", target.absolutePath).apply()
             avatar.setModelFile(target.absolutePath)
+            modelPlaceholder.visibility = View.GONE
             sendBroadcast(Intent(OverlayService.ACTION_UPDATE_PET).putExtra("model_path", target.absolutePath))
             Toast.makeText(this, "3D 模型已导入，桌宠已切换为独立网格模型", Toast.LENGTH_LONG).show()
         } catch (e: Exception) {
